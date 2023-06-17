@@ -31,14 +31,14 @@ namespace gasParticlesSimulation
         private Point? holeLocation = null;
         private Ellipse holeEllipse = null;
         private int simulationSpeed = 10;
-        bool isHole = false;
+        private int particleCount = 100;
+        private Button restartButton;
         public MainWindow()
         {
             InitializeComponent();
             this.Width = 800;
             this.Height = 600;
             // Ustalamy liczbę cząstek i tworzymy barierę
-            int particleCount = 100;
             barrier = new Barrier(particleCount);
 
             // Tworzymy listę cząstek i ich wizualizacji
@@ -88,7 +88,7 @@ namespace gasParticlesSimulation
                 Width = 100,
                 Height = 30
             };
-            Canvas.SetLeft(createHoleButton, 700); // Place it on the right side
+            Canvas.SetLeft(createHoleButton, 600); // Place it on the right side
             Canvas.SetTop(createHoleButton, 10); // Place it on the top
             createHoleButton.Click += (sender, e) =>
             {
@@ -117,6 +117,19 @@ namespace gasParticlesSimulation
             };
             canvas.Children.Add(createHoleButton);
 
+            // Initialize the restart button
+            restartButton = new Button
+            {
+                Content = "Restart Simulation",
+                Width = 150,
+                Height = 30,
+                IsEnabled = false  // Disabled by default
+            };
+            Canvas.SetLeft(restartButton, 600);
+            Canvas.SetTop(restartButton, 90);  // Adjust this value as needed
+            restartButton.Click += (sender, e) => RestartSimulation();
+            canvas.Children.Add(restartButton);
+
             //slider 
             Slider speedSlider = new Slider
             {
@@ -126,7 +139,7 @@ namespace gasParticlesSimulation
                 Width = 100,
                 Height = 30,
             };
-            Canvas.SetLeft(speedSlider, 700); // Place it on the right side
+            Canvas.SetLeft(speedSlider, 600); // Place it on the right side
             Canvas.SetTop(speedSlider, 50); // Place it below the button
             speedSlider.ValueChanged += (sender, e) =>
             {
@@ -135,6 +148,11 @@ namespace gasParticlesSimulation
             canvas.Children.Add(speedSlider);
 
             // Uruchamiamy symulację w tle
+            StartSimulation();
+        }
+
+        private void StartSimulation()
+        {
             for (int i = 0; i < particleCount; i++)
             {
                 int index = i;
@@ -156,138 +174,63 @@ namespace gasParticlesSimulation
                         // Bariera synchronizująca ruchy wszystkich cząstek
                         barrier.SignalAndWait();
 
+                        if (!particles.Any(p => p.IsActive))
+                        {
+                            // If all particles are inactive, disable the simulation and enable the restart button
+                            Dispatcher.Invoke(() =>
+                            {
+                                restartButton.IsEnabled = true;
+                            });
+
+                            // Break out of the loop to terminate the thread
+                            break;
+                        }
+
+
                         // Aktualizujemy wizualizację cząstki w głównym wątku
                         Dispatcher.Invoke(() =>
                         {
                             Canvas.SetLeft(ellipses[index], particles[index].X);
                             Canvas.SetTop(ellipses[index], particles[index].Y);
                         });
+
+
                         Thread.Sleep(simulationSpeed);
                     }
                 }).Start();
             }
         }
-
-        public class Particle
+        private void RestartSimulation()
         {
-            // RNG for initial positions
-            private static Random rand = new Random();
+            // Clear the old particles and holes
+            particles.Clear();
+            holeLocations.Clear();
+            foreach (var ellipse in ellipses) canvas.Children.Remove(ellipse);
+            foreach (var holeEllipse in holeEllipses) canvas.Children.Remove(holeEllipse);
+            ellipses.Clear();
+            holeEllipses.Clear();
 
-            public double X { get; set; }
-            public double Y { get; set; }
-            // Properties for velocity
-            public double VelocityX { get; set; }
-            public double VelocityY { get; set; }
-            public Particle()
+            // Initialize a new set of particles
+            for (int i = 0; i < particleCount; i++)
             {
-                // Initialize with a random position.
-                // Here we assume that the container is 800x600 pixels.
-                X = rand.NextDouble() * 800;
-                Y = rand.NextDouble() * 600;
-            }
+                Particle particle = new Particle();
+                particles.Add(particle);
 
-            public void Move()
-            {
-                // Randomly adjust the velocities
-                VelocityX += (rand.NextDouble() - 0.5) * 0.1;
-                VelocityY += (rand.NextDouble() - 0.5) * 0.1;
-
-                // Move the particle
-                X += VelocityX;
-                Y += VelocityY;
-
-                // Check for out-of-bounds and wrap around
-                if (X < 0) X += 800;
-                if (X > 800) X -= 800;
-                if (Y < 0) Y += 600;
-                if (Y > 600) Y -= 600;
-            }
-            public void MoveTowardsHole(List<Point> holeLocations, List<Particle> particles)
-            {
-                // If there are no holes, move randomly
-                if (holeLocations.Count == 0)
+                Ellipse ellipse = new Ellipse
                 {
-                    Move();
-                    return;
-                }
-
-                // Find the closest hole
-                Point closestHole = holeLocations.OrderBy(h => Math.Sqrt((h.X - X) * (h.X - X) + (h.Y - Y) * (h.Y - Y))).First();
-
-                // If there's a hole, move towards it
-                var directionX = closestHole.X - X;
-                var directionY = closestHole.Y - Y;
-
-                // Normalize the direction
-                var directionLength = Math.Sqrt(directionX * directionX + directionY * directionY);
-                directionX /= directionLength;
-                directionY /= directionLength;
-
-                // Predict the next position
-                double nextX = X + directionX * 5;
-                double nextY = Y + directionY * 5;
-
-                // Check for collisions with other particles
-                foreach (Particle other in particles)
-                {
-                    // Don't collide with yourself
-                    if (ReferenceEquals(this, other)) continue;
-
-                    double dx = other.X - nextX;
-                    double dy = other.Y - nextY;
-                    double distance = Math.Sqrt(dx * dx + dy * dy);
-
-                    // If a collision is detected, adjust the velocity
-                    if (distance < 10) // Assuming the particle diameter to be 10
-                    {
-                        VelocityX = -VelocityX;
-                        VelocityY = -VelocityY;
-                    }
-                }
-
-                // Move the particle
-                X += directionX * 5;
-                Y += directionY * 5;
-
-                // Check for out-of-bounds and wrap around
-                if (X < 0) X += 800;
-                if (X > 800) X -= 800;
-                if (Y < 0) Y += 600;
-                if (Y > 600) Y -= 600;
+                    Width = 10,
+                    Height = 10,
+                    Fill = Brushes.Red
+                };
+                ellipses.Add(ellipse);
+                canvas.Children.Add(ellipse);
             }
 
-
-            private double vX;  // Velocity in the X direction
-            private double vY;  // Velocity in the Y direction
-
-            public void HandleCollision(List<Particle> particles)
-            {
-                foreach (Particle other in particles)
-                {
-                    // Don't collide with yourself
-                    if (ReferenceEquals(this, other)) continue;
-
-                    // Calculate the distance between this particle and the other
-                    double dx = other.X - X;
-                    double dy = other.Y - Y;
-                    double distance = Math.Sqrt(dx * dx + dy * dy);
-
-                    // If the distance is less than some threshold (here, the size of a particle)...
-                    if (distance < 10)
-                    {
-                        // Swap velocities
-                        double tempVX = VelocityX;
-                        double tempVY = VelocityY;
-                        VelocityX = other.VelocityX;
-                        VelocityY = other.VelocityY;
-                        other.VelocityX = tempVX;
-                        other.VelocityY = tempVY;
-                    }
-                }
-            }
-
-            // ... rest of your Particle code here
+            // Start the simulation loop again
+            restartButton.IsEnabled = false;
+            StartSimulation();
         }
+
 
 
     }

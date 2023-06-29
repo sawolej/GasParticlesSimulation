@@ -14,14 +14,38 @@ namespace gasParticlesSimulation
 {
     public class Hole
     {
-        private readonly object lockObject = new object();
+       
         public int particleCount = 0;
         public Point Location { get; private set; }
         public bool IsActive { get; set; }
         public Ellipse HoleEllipse { get; private set; }
         private Thread thread;
-       
 
+        private SemaphoreSlim semaphore = new SemaphoreSlim(10, 10);
+        public bool TryEnter(Particle particle)
+        {
+            if (!semaphore.Wait(0))
+                return false;
+
+            try
+            {
+                double dx = Location.X - particle.X;
+                double dy = Location.Y - particle.Y;
+                double distance = Math.Sqrt(dx * dx + dy * dy);
+
+                if (distance < 5 && IsActive)
+                {
+                    particleCount++;
+                    return true;
+                }
+
+                return false;
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }
         public Hole(Point location, Canvas canvas, Dispatcher dispatcher)
         {
             Location = location;
@@ -41,22 +65,19 @@ namespace gasParticlesSimulation
 
             thread = new Thread(() =>
             {
-                // Your thread's code here.
+       
                 while (IsActive)
                 {
-                    // Perform the hole's functionality here
-                    lock (lockObject)
-                    {
-                        // Perform any operations related to consuming particles or other logic
+          
                         
                         if (particleCount >= 10)
                         {
                             RemoveFromCanvas();
-                            break; // Exit the thread loop when the condition is met
+                            break;
                         }
-                    }
+                    
 
-                    Thread.Sleep(100); // Sleep to avoid busy waiting
+                    Thread.Sleep(100);
                 }
             });
         }
@@ -68,7 +89,7 @@ namespace gasParticlesSimulation
 
         public void RemoveFromCanvas()
         {
-            IsActive = false; // Set the isActive flag to false
+            IsActive = false; 
             if (HoleEllipse != null && HoleEllipse.Parent is Canvas canvas)
             {
                 canvas.Dispatcher.Invoke(() => canvas.Children.Remove(HoleEllipse));

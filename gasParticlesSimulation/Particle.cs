@@ -23,7 +23,7 @@ namespace gasParticlesSimulation
     {
         //----------------------- params
         private static Random rand = new Random();
-        private static SemaphoreSlim semaphore = new SemaphoreSlim(1, 1);
+       // private static SemaphoreSlim semaphore = new SemaphoreSlim(10, 10);
         public double X { get; set; }
         public double Y { get; set; }
         public bool IsActive { get; set; }  
@@ -55,9 +55,7 @@ namespace gasParticlesSimulation
         }
         public void MoveTowardsHole(List<Hole> holes, List<Particle> particles)
         {
-            semaphore.Wait(); // only one thread can move
-            try
-            {
+          
                 // if no holes or all holes are inactive, go random
                 if (holes.Count == 0 || holes.All(h => !h.IsActive))
                 {
@@ -89,8 +87,10 @@ namespace gasParticlesSimulation
                 double nextY = Y + directionY * 5;
 
                 // check if there is any collision
+
                 foreach (Particle other in particles)
                 {
+
                     if (ReferenceEquals(this, other)) continue;
 
                     double dx = other.X - nextX;
@@ -102,6 +102,7 @@ namespace gasParticlesSimulation
                         VelocityX = -VelocityX;
                         VelocityY = -VelocityY;
                     }
+
                 }
 
                 X += directionX * 5;
@@ -112,23 +113,9 @@ namespace gasParticlesSimulation
                 if (Y < 0) Y += 600;
                 if (Y > 600) Y -= 600;
 
-                foreach (var hole in holes)
-                {
-                    double dx = hole.Location.X - X;
-                    double dy = hole.Location.Y - Y;
-                    double distance = Math.Sqrt(dx * dx + dy * dy);
+            closestHole.TryEnter(this);
+           
 
-                    if (distance < 5 && hole.IsActive)
-                    {
-                        hole.particleCount++;
-                        break;
-                    }
-                }
-            }
-            finally
-            {
-                semaphore.Release();
-            }
         }
 
 

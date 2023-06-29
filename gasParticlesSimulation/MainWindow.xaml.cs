@@ -26,9 +26,6 @@ namespace gasParticlesSimulation
         private List<Particle> particles;
         private List<Ellipse> ellipses;
         private Barrier barrier;
-        private List<Point> holeLocations = new List<Point>();
-        private List<Ellipse> holeEllipses = new List<Ellipse>();
-        private Point? holeLocation = null;
         private Ellipse holeEllipse = null;
         private int simulationSpeed = 10;
         private int particleCount = 100;
@@ -41,14 +38,12 @@ namespace gasParticlesSimulation
             InitializeComponent();
             this.Width = 800;
             this.Height = 600;
-            // Ustalamy liczbę cząstek i tworzymy barierę
             barrier = new Barrier(particleCount);
 
-            // Tworzymy listę cząstek i ich wizualizacji
+            //particles&&visualisation
             particles = new List<Particle>();
             ellipses = new List<Ellipse>();
 
-            // Inicjalizujemy cząstki i ich wizualizacje
             for (int i = 0; i < particleCount; i++)
             {
                 Particle particle = new Particle();
@@ -63,10 +58,10 @@ namespace gasParticlesSimulation
                 ellipses.Add(ellipse);
             }
 
-            // Tworzymy płótno do wyświetlania cząstek
+            // canvas
             canvas = new Canvas()
             {
-                Background = Brushes.LightBlue // setting background color for the Canvas
+                Background = Brushes.LightBlue
             };
             foreach (Ellipse ellipse in ellipses)
             {
@@ -84,19 +79,18 @@ namespace gasParticlesSimulation
             canvas.Children.Add(holeEllipse);
             holeEllipse.Visibility = Visibility.Hidden;
 
-            // Add a button to create a hole
             Button createHoleButton = new Button
             {
                 Content = "Create Hole",
                 Width = 100,
                 Height = 30
             };
-            Canvas.SetLeft(createHoleButton, 600); // Place it on the right side
-            Canvas.SetTop(createHoleButton, 10); // Place it on the top
+            Canvas.SetLeft(createHoleButton, 600); 
+            Canvas.SetTop(createHoleButton, 10); 
 
             createHoleButton.Click += (sender, e) =>
             {
-                createHoleButton.IsEnabled = false; // Disable the button
+                createHoleButton.IsEnabled = false; // Disable
                 Random rand = new Random();
                 Point newHoleLocation = new Point(rand.Next(50, 750), rand.Next(50, 550));
 
@@ -111,7 +105,7 @@ namespace gasParticlesSimulation
                     Dispatcher.Invoke(() =>
                     {
                         createHoleButton.IsEnabled = true;
-                        timer.Dispose(); // Dispose the timer to prevent further execution
+                        timer.Dispose(); 
                     });
                 }, null, 300, Timeout.Infinite);
             };
@@ -128,15 +122,15 @@ namespace gasParticlesSimulation
                 Width = 100,
                 Height = 30,
             };
-            Canvas.SetLeft(speedSlider, 600); // Place it on the right side
-            Canvas.SetTop(speedSlider, 50); // Place it below the button
+            Canvas.SetLeft(speedSlider, 600);
+            Canvas.SetTop(speedSlider, 50);
             speedSlider.ValueChanged += (sender, e) =>
             {
                 simulationSpeed = (int)e.NewValue;
             };
             canvas.Children.Add(speedSlider);
 
-            // Temperature text
+            // temperature text
             TextBlock temperatureText = new TextBlock
             {
                 Text = "Temperature",
@@ -147,23 +141,20 @@ namespace gasParticlesSimulation
             };
             canvas.Children.Add(temperatureText);
 
-            // Uruchamiamy symulację w tle
+            // siup
             StartSimulation();
         }
 
         private void StartSimulation()
         {
+            //colors
             speedSlider.ValueChanged += (sender, e) =>
             {
                 simulationSpeed = (int)e.NewValue;
 
-                // Calculate color values for the gradient based on the slider value
-                // Calculate color values for the gradient based on the slider value
                 byte red = (byte)(255 * (simulationSpeed - speedSlider.Minimum) / (speedSlider.Maximum - speedSlider.Minimum));
                 byte green = (byte)(255 * (speedSlider.Maximum - simulationSpeed) / (speedSlider.Maximum - speedSlider.Minimum));
-                byte blue = 200; // Set a fixed blue value for lightness
-
-                // Set the background color of the canvas
+                byte blue = 200; 
                 canvas.Background = new SolidColorBrush(Color.FromRgb(blue, green, red));
             };
 
@@ -174,10 +165,7 @@ namespace gasParticlesSimulation
                 {
                     while (true)
                     {
-                        //if (isHole) particles[index].Move();
-                        //[index].MoveTowardsHole(holeLocation); 
-
-                        // Blokada dla obsługi kolizji
+                       
                         lock (particles[index])
                         {
                             particles[index].MoveTowardsHole(holes, particles);
@@ -185,13 +173,13 @@ namespace gasParticlesSimulation
 
                         }
 
-                        // Bariera synchronizująca ruchy wszystkich cząstek
+                        // synchronise particles move
                         barrier.SignalAndWait();
 
          
 
 
-                        // Aktualizujemy wizualizację cząstki w głównym wątku
+                        // actualise in main thread
                         Dispatcher.Invoke(() =>
                         {
                             Canvas.SetLeft(ellipses[index], particles[index].X);

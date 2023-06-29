@@ -32,7 +32,10 @@ namespace gasParticlesSimulation
         private Ellipse holeEllipse = null;
         private int simulationSpeed = 10;
         private int particleCount = 100;
-        private Button restartButton;
+        Slider speedSlider;
+
+        private List<Hole> holes = new List<Hole>();
+
         public MainWindow()
         {
             InitializeComponent();
@@ -55,7 +58,7 @@ namespace gasParticlesSimulation
                 {
                     Width = 10,
                     Height = 10,
-                    Fill = Brushes.Red
+                    Fill = Brushes.White
                 };
                 ellipses.Add(ellipse);
             }
@@ -63,7 +66,7 @@ namespace gasParticlesSimulation
             // Tworzymy płótno do wyświetlania cząstek
             canvas = new Canvas()
             {
-                Background = Brushes.LightGray // setting background color for the Canvas
+                Background = Brushes.LightBlue // setting background color for the Canvas
             };
             foreach (Ellipse ellipse in ellipses)
             {
@@ -79,7 +82,7 @@ namespace gasParticlesSimulation
                 Fill = Brushes.Black
             };
             canvas.Children.Add(holeEllipse);
-            holeEllipse.Visibility = Visibility.Hidden;  // Hide it initially
+            holeEllipse.Visibility = Visibility.Hidden;
 
             // Add a button to create a hole
             Button createHoleButton = new Button
@@ -90,48 +93,34 @@ namespace gasParticlesSimulation
             };
             Canvas.SetLeft(createHoleButton, 600); // Place it on the right side
             Canvas.SetTop(createHoleButton, 10); // Place it on the top
+
             createHoleButton.Click += (sender, e) =>
             {
+                createHoleButton.IsEnabled = false; // Disable the button
                 Random rand = new Random();
-
-               
-
-                // Create a hole in the middle of the canvas
                 Point newHoleLocation = new Point(rand.Next(50, 750), rand.Next(50, 550));
-                holeLocations.Add(newHoleLocation);
 
-                // Create a new ellipse for this hole
-                Ellipse newHoleEllipse = new Ellipse
+                Hole newHole = new Hole(newHoleLocation, canvas, Dispatcher);
+                newHole.Start();
+                holes.Add(newHole);
+
+                // Enable the button after 2 seconds
+                Timer timer = null;
+                timer = new Timer((state) =>
                 {
-                    Width = 50,
-                    Height = 50,
-                    Fill = Brushes.Black
-                };
-                holeEllipses.Add(newHoleEllipse);
-                canvas.Children.Add(newHoleEllipse);
-
-                // Show the hole ellipse
-                Canvas.SetLeft(newHoleEllipse, newHoleLocation.X - newHoleEllipse.Width / 2);
-                Canvas.SetTop(newHoleEllipse, newHoleLocation.Y - newHoleEllipse.Height / 2);
-                newHoleEllipse.Visibility = Visibility.Visible;
+                    Dispatcher.Invoke(() =>
+                    {
+                        createHoleButton.IsEnabled = true;
+                        timer.Dispose(); // Dispose the timer to prevent further execution
+                    });
+                }, null, 300, Timeout.Infinite);
             };
+
             canvas.Children.Add(createHoleButton);
 
-            // Initialize the restart button
-            restartButton = new Button
-            {
-                Content = "Restart Simulation",
-                Width = 150,
-                Height = 30,
-                IsEnabled = false  // Disabled by default
-            };
-            Canvas.SetLeft(restartButton, 600);
-            Canvas.SetTop(restartButton, 90);  // Adjust this value as needed
-            restartButton.Click += (sender, e) => RestartSimulation();
-            canvas.Children.Add(restartButton);
 
             //slider 
-            Slider speedSlider = new Slider
+            speedSlider = new Slider
             {
                 Minimum = 1,
                 Maximum = 100,
@@ -147,12 +136,37 @@ namespace gasParticlesSimulation
             };
             canvas.Children.Add(speedSlider);
 
+            // Temperature text
+            TextBlock temperatureText = new TextBlock
+            {
+                Text = "Temperature",
+                Foreground = Brushes.Black,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(620, 80, 0, 0)
+            };
+            canvas.Children.Add(temperatureText);
+
             // Uruchamiamy symulację w tle
             StartSimulation();
         }
 
         private void StartSimulation()
         {
+            speedSlider.ValueChanged += (sender, e) =>
+            {
+                simulationSpeed = (int)e.NewValue;
+
+                // Calculate color values for the gradient based on the slider value
+                // Calculate color values for the gradient based on the slider value
+                byte red = (byte)(255 * (simulationSpeed - speedSlider.Minimum) / (speedSlider.Maximum - speedSlider.Minimum));
+                byte green = (byte)(255 * (speedSlider.Maximum - simulationSpeed) / (speedSlider.Maximum - speedSlider.Minimum));
+                byte blue = 200; // Set a fixed blue value for lightness
+
+                // Set the background color of the canvas
+                canvas.Background = new SolidColorBrush(Color.FromRgb(blue, green, red));
+            };
+
             for (int i = 0; i < particleCount; i++)
             {
                 int index = i;
@@ -166,7 +180,7 @@ namespace gasParticlesSimulation
                         // Blokada dla obsługi kolizji
                         lock (particles[index])
                         {
-                            particles[index].MoveTowardsHole(holeLocations, particles);
+                            particles[index].MoveTowardsHole(holes, particles);
                             particles[index].HandleCollision(particles);
 
                         }
@@ -174,17 +188,7 @@ namespace gasParticlesSimulation
                         // Bariera synchronizująca ruchy wszystkich cząstek
                         barrier.SignalAndWait();
 
-                        if (!particles.Any(p => p.IsActive))
-                        {
-                            // If all particles are inactive, disable the simulation and enable the restart button
-                            Dispatcher.Invoke(() =>
-                            {
-                                restartButton.IsEnabled = true;
-                            });
-
-                            // Break out of the loop to terminate the thread
-                            break;
-                        }
+         
 
 
                         // Aktualizujemy wizualizację cząstki w głównym wątku
@@ -198,37 +202,9 @@ namespace gasParticlesSimulation
                         Thread.Sleep(simulationSpeed);
                     }
                 }).Start();
+
+
             }
-        }
-        private void RestartSimulation()
-        {
-            // Clear the old particles and holes
-            particles.Clear();
-            holeLocations.Clear();
-            foreach (var ellipse in ellipses) canvas.Children.Remove(ellipse);
-            foreach (var holeEllipse in holeEllipses) canvas.Children.Remove(holeEllipse);
-            ellipses.Clear();
-            holeEllipses.Clear();
-
-            // Initialize a new set of particles
-            for (int i = 0; i < particleCount; i++)
-            {
-                Particle particle = new Particle();
-                particles.Add(particle);
-
-                Ellipse ellipse = new Ellipse
-                {
-                    Width = 10,
-                    Height = 10,
-                    Fill = Brushes.Red
-                };
-                ellipses.Add(ellipse);
-                canvas.Children.Add(ellipse);
-            }
-
-            // Start the simulation loop again
-            restartButton.IsEnabled = false;
-            StartSimulation();
         }
 
 

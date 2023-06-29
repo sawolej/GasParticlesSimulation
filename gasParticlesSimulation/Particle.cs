@@ -21,20 +21,17 @@ namespace gasParticlesSimulation
 {
     public class Particle
     {
-        // RNG for initial positions
+        //----------------------- params
         private static Random rand = new Random();
-
+        private static SemaphoreSlim semaphore = new SemaphoreSlim(1, 1);
         public double X { get; set; }
         public double Y { get; set; }
-        // Properties for velocity
-        public bool IsActive { get; set; }  // Add this property to the Particle class
+        public bool IsActive { get; set; }  
 
         public double VelocityX { get; set; }
         public double VelocityY { get; set; }
         public Particle()
         {
-            // Initialize with a random position.
-            // Here we assume that the container is 800x600 pixels.
             X = rand.NextDouble() * 800;
             Y = rand.NextDouble() * 600;
             IsActive = true;
@@ -42,108 +39,116 @@ namespace gasParticlesSimulation
 
         public void Move()
         {
-            // Randomly adjust the velocities
+
+            //random velocity and move
             VelocityX += (rand.NextDouble() - 0.5) * 0.1;
             VelocityY += (rand.NextDouble() - 0.5) * 0.1;
 
-            // Move the particle
             X += VelocityX;
             Y += VelocityY;
 
-            // Check for out-of-bounds and wrap around
+            //dont let it go!
             if (X < 0) X += 800;
             if (X > 800) X -= 800;
             if (Y < 0) Y += 600;
             if (Y > 600) Y -= 600;
         }
-        public void MoveTowardsHole(List<Point> holeLocations, List<Particle> particles)
+        public void MoveTowardsHole(List<Hole> holes, List<Particle> particles)
         {
-            // If there are no holes, move randomly
-            if (holeLocations.Count == 0)
+            semaphore.Wait(); // only one thread can move
+            try
             {
-                Move();
-                return;
-            }
-
-            // Find the closest hole
-            Point closestHole = holeLocations.OrderBy(h => Math.Sqrt((h.X - X) * (h.X - X) + (h.Y - Y) * (h.Y - Y))).First();
-
-            // If there's a hole, move towards it
-            var directionX = closestHole.X - X;
-            var directionY = closestHole.Y - Y;
-
-            // Normalize the direction
-            var directionLength = Math.Sqrt(directionX * directionX + directionY * directionY);
-            directionX /= directionLength;
-            directionY /= directionLength;
-
-            // Predict the next position
-            double nextX = X + directionX * 5;
-            double nextY = Y + directionY * 5;
-
-            // Check for collisions with other particles
-            foreach (Particle other in particles)
-            {
-                // Don't collide with yourself
-                if (ReferenceEquals(this, other)) continue;
-
-                double dx = other.X - nextX;
-                double dy = other.Y - nextY;
-                double distance = Math.Sqrt(dx * dx + dy * dy);
-
-                // If a collision is detected, adjust the velocity
-                if (distance < 10) // Assuming the particle diameter to be 10
+                // if no holes or all holes are inactive, go random
+                if (holes.Count == 0 || holes.All(h => !h.IsActive))
                 {
-                    VelocityX = -VelocityX;
-                    VelocityY = -VelocityY;
+                    Move();
+                    return;
+                }
+
+                // find the closest active hole and calculate direction toward
+                Hole closestHole = holes.Where(h => h.IsActive)
+                    .OrderBy(h => Math.Sqrt((h.Location.X - X) * (h.Location.X - X) + (h.Location.Y - Y) * (h.Location.Y - Y)))
+                    .FirstOrDefault();
+
+                // if no active hole found, go random
+                if (closestHole == null)
+                {
+                    Move();
+                    return;
+                }
+
+                var directionX = closestHole.Location.X - X;
+                var directionY = closestHole.Location.Y - Y;
+
+                var directionLength = Math.Sqrt(directionX * directionX + directionY * directionY);
+                directionX /= directionLength;
+                directionY /= directionLength;
+
+                // calculate next position
+                double nextX = X + directionX * 5;
+                double nextY = Y + directionY * 5;
+
+                // check if there is any collision
+                foreach (Particle other in particles)
+                {
+                    if (ReferenceEquals(this, other)) continue;
+
+                    double dx = other.X - nextX;
+                    double dy = other.Y - nextY;
+                    double distance = Math.Sqrt(dx * dx + dy * dy);
+
+                    if (distance < 10)
+                    {
+                        VelocityX = -VelocityX;
+                        VelocityY = -VelocityY;
+                    }
+                }
+
+                X += directionX * 5;
+                Y += directionY * 5;
+
+                if (X < 0) X += 800;
+                if (X > 800) X -= 800;
+                if (Y < 0) Y += 600;
+                if (Y > 600) Y -= 600;
+
+                foreach (var hole in holes)
+                {
+                    double dx = hole.Location.X - X;
+                    double dy = hole.Location.Y - Y;
+                    double distance = Math.Sqrt(dx * dx + dy * dy);
+
+                    if (distance < 5 && hole.IsActive)
+                    {
+                        hole.particleCount++;
+                        break;
+                    }
                 }
             }
-
-            // Move the particle
-            X += directionX * 5;
-            Y += directionY * 5;
-
-            // Check for out-of-bounds and wrap around
-            if (X < 0) X += 800;
-            if (X > 800) X -= 800;
-            if (Y < 0) Y += 600;
-            if (Y > 600) Y -= 600;
-
-            foreach (var hole in holeLocations)
+            finally
             {
-                double dx = hole.X - X;
-                double dy = hole.Y - Y;
-                double distance = Math.Sqrt(dx * dx + dy * dy);
-
-                if (distance < 15) // Assuming the hole has a radius of 50
-                {
-                    IsActive = false;
-                    break;
-                }
+                semaphore.Release();
             }
-
         }
 
 
-        private double vX;  // Velocity in the X direction
-        private double vY;  // Velocity in the Y direction
+
+
+        private double vX; 
+        private double vY; 
 
         public void HandleCollision(List<Particle> particles)
         {
             foreach (Particle other in particles)
             {
-                // Don't collide with yourself
                 if (ReferenceEquals(this, other)) continue;
 
-                // Calculate the distance between this particle and the other
                 double dx = other.X - X;
                 double dy = other.Y - Y;
                 double distance = Math.Sqrt(dx * dx + dy * dy);
 
-                // If the distance is less than some threshold (here, the size of a particle)...
                 if (distance < 10)
                 {
-                    // Swap velocities
                     double tempVX = VelocityX;
                     double tempVY = VelocityY;
                     VelocityX = other.VelocityX;
@@ -154,6 +159,5 @@ namespace gasParticlesSimulation
             }
         }
 
-        // ... rest of your Particle code here
     }
 }
